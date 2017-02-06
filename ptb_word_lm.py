@@ -47,6 +47,9 @@ $ python ptb_word_lm.py --data_path=simple-examples/data/
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+from tensorflow.contrib.cudnn_rnn.python.ops.cudnn_rnn_ops import CudnnLSTM
+from tensorflow.contrib.cudnn_rnn.python.ops.cudnn_rnn_ops import RNNParamsSaveable
+from tensorflow.contrib.legacy_seq2seq.python.ops.seq2seq import sequence_loss_by_example
 
 import time
 import sys
@@ -133,8 +136,8 @@ class PTBModel(object):
     if is_training and config.keep_prob < 1:
         inputs = tf.nn.dropout(inputs, config.keep_prob)
 
-    rnn = tf.contrib.cudnn_rnn.CudnnLSTM(config.num_layers, size, size, input_mode='linear_input', direction='unidirectional',
-                                         dropout=config.keep_prob, seed=0, seed2=0, ttype=data_type(is_lstm_layer=True))
+    rnn = CudnnLSTM(config.num_layers, size, size, input_mode='linear_input', direction='unidirectional',
+                                         dropout=config.keep_prob, seed=0, seed2=0)
     params_size_t = rnn.params_size()
     self._initial_input_h = tf.placeholder(data_type(is_lstm_layer=True), shape=[config.num_layers, batch_size, size]) #self._initial_input_h = tf.Variable(tf.zeros([config.num_layers, batch_size, size]))
     self._initial_input_c = tf.placeholder(data_type(is_lstm_layer=True), shape=[config.num_layers, batch_size, size]) #self._initial_input_c = tf.Variable(tf.zeros([config.num_layers, batch_size, size]))
@@ -148,7 +151,7 @@ class PTBModel(object):
     self._output_h = output_h
     self._output_c = output_c
 
-    output = tf.reshape(tf.concat(1, tf.transpose(outputs, [1, 0, 2])), [-1, size])
+    output = tf.reshape(tf.concat(values=tf.transpose(outputs, [1, 0, 2]), axis=1), [-1, size])
 
     if debug:
         variable_summaries(output, 'multiRNN_output')
@@ -160,7 +163,8 @@ class PTBModel(object):
     if debug:
        variable_summaries(logits, 'logits')
 
-    loss = tf.nn.seq2seq.sequence_loss_by_example(
+    #loss = tf.contrib.nn.seq2seq.sequence_loss_by_example(
+    loss = sequence_loss_by_example(   
         [logits],
         [tf.reshape(self._targets, [-1])],
         [tf.ones([batch_size * num_steps], dtype=data_type(is_lstm_layer=False))])
